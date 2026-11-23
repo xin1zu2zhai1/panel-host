@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>クイズパネル ホスト</title>
+<meta name="description" content="クイズ番組のように、参加者の回答をパネルで表示するホスト画面">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='10' width='56' height='40' rx='6' fill='%231b2a6b'/%3E%3Crect x='10' y='16' width='44' height='28' rx='3' fill='%23fff'/%3E%3Ccircle cx='32' cy='30' r='9' fill='none' stroke='%23e8382f' stroke-width='4'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/host.css">
+</head>
+<body data-tab="play">
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="logo">Q</span><span class="brand-text">クイズパネル<small>ホスト</small></span></div>
+    <button class="joininfo" id="btnQr" title="参加用のQRコードとURLを表示">
+      <span class="code-label">参加コード</span>
+      <span class="code" id="code">準備中…</span>
+      <span class="qr-hint">QR・URL</span>
+    </button>
+    <div class="netinfo" id="netinfo"></div>
+    <div class="counts" id="counts"></div>
+  </header>
+  <div id="warnbar" class="warnbar" hidden></div>
+  <nav class="tabs">
+    <button data-tab="play" class="on">進行</button>
+    <button data-tab="questions">問題</button>
+    <button data-tab="players">参加者</button>
+    <button data-tab="settings">設定</button>
+  </nav>
+  <main>
+    <section id="tab-play" class="play">
+      <aside class="control" id="control"></aside>
+      <div class="stage" id="stage">
+        <div class="stage-head" id="stageHead"></div>
+        <div class="board-wrap" id="boardWrap">
+          <div class="board-grid" id="board"></div>
+          <div class="board-empty" id="boardEmpty" hidden></div>
+        </div>
+        <div class="ranking" id="ranking" hidden></div>
+        <div class="present-bar" id="presentBar"></div>
+      </div>
+    </section>
+    <section id="tab-questions" class="pane" hidden></section>
+    <section id="tab-players" class="pane" hidden></section>
+    <section id="tab-settings" class="pane" hidden></section>
+  </main>
+</div>
+<div id="modal" hidden></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="fatal" hidden></div>
+
+<script src="js/config.js"></script>
+<script src="js/net.js"></script>
+<script src="js/common.js"></script>
+<script src="js/host.js"></script>
+</body>
+</html>
