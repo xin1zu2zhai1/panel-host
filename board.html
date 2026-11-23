@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>クイズパネル 表示用</title>
+<meta name="description" content="パネルの一覧だけを表示するページ（画面共有・プロジェクター用）">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='10' width='56' height='40' rx='6' fill='%231b2a6b'/%3E%3Crect x='10' y='16' width='44' height='28' rx='3' fill='%23fff'/%3E%3Ccircle cx='32' cy='30' r='9' fill='none' stroke='%23e8382f' stroke-width='4'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/stage.css">
+<link rel="stylesheet" href="css/board.css">
+</head>
+<body class="board-page">
+<div class="stage" id="stage">
+  <div class="stage-head"></div>
+  <div class="board-wrap">
+    <div class="board-grid" id="board"></div>
+    <div class="board-empty" hidden></div>
+  </div>
+  <div class="ranking" hidden></div>
+</div>
+
+<div id="waiting" class="bp-wait">
+  <div class="bp-wait-box">
+    <div class="bp-title">ホスト画面を待っています…</div>
+    <p>このページは、ホスト画面のパネル表示だけを映すためのものです。<br>
+    <b>同じブラウザ</b>でホスト画面を開き、進行タブの「表示用ページを開く」から開いてください。</p>
+  </div>
+</div>
+<div id="lost" class="bp-lost" hidden>ホスト画面との連絡が途切れています（ホスト画面を閉じた・再読み込みした場合は、しばらくすると戻ります）</div>
+
+<div class="bp-tools" id="tools">
+  <button id="fsBtn" title="全画面表示（F キー・ダブルクリックでも切り替え）">全画面</button>
+  <button id="helpBtn" title="キー操作">?</button>
+</div>
+<div class="bp-help" id="help" hidden>
+  <p><b>表示用ページ</b>（画面共有・プロジェクター用）</p>
+  <p>ここで押したキーやクリックはホスト画面の操作になります。</p>
+  <ul>
+    <li>Space / Enter … 次へ</li>
+    <li>A … 一斉オープン ／ J … 正解発表</li>
+    <li>← → … 問題の切り替え ／ R … 順位</li>
+    <li>パネルをクリック … 開く・○×の切り替え</li>
+    <li>F・ダブルクリック … 全画面</li>
+  </ul>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/common.js"></script>
+<script src="js/stage.js"></script>
+<script src="js/board.js"></script>
+</body>
+</html>

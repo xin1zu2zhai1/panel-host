@@ -459,8 +459,6 @@
       game.cur = keepCur;
       fixCur();
       online = {};
-      panelEls.forEach(function (el) { el.remove(); });
-      panelEls.clear();
       net.setSubscriptions(subsFor(code));
       sessionBusy = false;
       conflictAt = 0;
@@ -634,8 +632,6 @@
     stageView = stageView === 'rank' ? 'board' : 'rank';
     rankWave = stageView === 'rank' ? now() : 0;
     renderControl();
-    renderStageHead();
-    renderBoard();
   }
 
   function primaryAction() {
@@ -760,7 +756,7 @@
       if (d.header) renderHeader();
       if (d.control) renderControl();
       else if (d.progress) renderProgress();
-      if (d.board) renderBoard();
+      if (d.board && !d.control) renderStage();
       if (d.players && tab === 'players') renderPlayers();
       if (d.settings && tab === 'settings') renderSettings();
     });
@@ -770,8 +766,6 @@
     renderHeader();
     renderTabs();
     renderControl();
-    renderStageHead();
-    renderBoard();
     if (tab === 'questions') renderQuestions();
     if (tab === 'players') renderPlayers();
     if (tab === 'settings') renderSettings();
@@ -827,8 +821,9 @@
     var el = $('#control');
     var q = curQ();
     if (!q) {
-      el.innerHTML = '<div class="ctl-empty">問題がまだありません。<button data-act="goto-questions" class="btn primary">問題を作る</button></div>';
-      renderStageHead();
+      el.innerHTML = '<div class="ctl-empty">問題がまだありません。<button data-act="goto-questions" class="btn primary">問題を作る</button></div>' +
+        '<div class="ctl-sub">' + boardButtonHtml() + '</div>';
+      renderStage();
       return;
     }
     var phase = curPhase();
@@ -881,6 +876,7 @@
 
     html += '<div class="ctl-sub">';
     html += '<button class="btn small" data-act="present">全画面で表示 <kbd>F</kbd></button>';
+    html += boardButtonHtml();
     html += '<button class="btn small" data-act="toggle-rank">' + (stageView === 'rank' && !game.final ? 'パネルに戻る' : '順位を表示') + ' <kbd>R</kbd></button>';
     if (phase !== 'final') html += '<button class="btn small" data-act="final">最終結果発表</button>';
     if (phase !== 'waiting' && phase !== 'final') html += '<button class="btn small ghost" data-act="redo">この問題をやり直す</button>';
@@ -890,8 +886,14 @@
 
     el.innerHTML = html;
     renderProgress();
-    renderStageHead();
+    renderStage();
     renderPresentBar();
+  }
+
+  function boardButtonHtml() {
+    var n = boardCount();
+    return '<button class="btn small' + (n ? ' on' : '') + '" data-act="open-board" title="パネルだけを表示するページを別ウィンドウで開きます（画面共有用）">' +
+      '表示用ページを開く' + (n ? '<span class="board-on">● 表示中</span>' : '') + '</button>';
   }
 
   function typeLabel(t) { return { text: '記述', choice: '選択式', draw: '手書き' }[t] || t; }
@@ -920,299 +922,165 @@
   function renderTimer() {
     var r = curRound();
     var remain = r && r.phase === 'open' && r.dl ? Math.max(0, Math.ceil((r.dl - now()) / 1000)) : null;
-    ['#ctlTimer', '#stageTimer'].forEach(function (sel) {
-      var el = $(sel);
-      if (!el) return;
+    var el = $('#ctlTimer');
+    if (el) {
       el.textContent = remain == null ? '' : remain;
       el.classList.toggle('hurry', remain != null && remain <= 5);
-    });
+    }
+    if (stage) stage.tick();
   }
 
-  function renderStageHead() {
-    var el = $('#stageHead');
-    var q = curQ();
-    var phase = curPhase();
-    var stage = $('#stage');
-    stage.dataset.phase = phase;
-    stage.dataset.view = stageView;
-    if (stageView === 'rank') {
-      el.innerHTML = '';
-      renderRanking();
-      return;
-    }
-    $('#ranking').hidden = true;
-    $('#boardWrap').hidden = false;
-    if (!q) {
-      el.innerHTML = '<div class="sh-main"><div class="sh-text">問題を登録してください</div></div>';
-      return;
-    }
-    var no = qIndex(q.id) + 1;
-    var html = '<div class="sh-main"><div class="sh-no">第' + no + '問</div>';
-    if (phase === 'waiting') {
-      html += '<div class="sh-text sh-wait">まもなく出題します</div>';
-    } else {
-      html += '<div class="sh-text">' + esc(q.text) + '</div>';
-      if (q.type === 'choice') {
-        var counts = null;
-        if (phase === 'judged') {
-          var r = curRound();
-          counts = q.choices.map(function () { return 0; });
-          playerIds().forEach(function (pid) {
-            var a = r.answers[pid];
-            if (a && counts[a.v] != null) counts[a.v]++;
-          });
-        }
-        html += '<div class="sh-choices">' + q.choices.map(function (c, k) {
-          var cls = 'ch c' + k + (phase === 'judged' && q.correct.indexOf(k) >= 0 ? ' right' : '');
-          return '<span class="' + cls + '"><b>' + QP.choiceLabel(k) + '</b>' + esc(c) +
-            (counts ? '<i>' + counts[k] + '人</i>' : '') + '</span>';
-        }).join('') + '</div>';
-      }
-    }
-    html += '</div>';
-    html += '<div class="sh-side">';
-    if (phase === 'open') {
-      var rr = curRound();
-      html += rr && rr.dl ? '<div class="sh-timer" id="stageTimer"></div>' : '<div class="sh-badge">回答受付中</div>';
-    } else if (phase === 'closed') {
-      html += '<div class="sh-badge closed">締め切り</div>';
-    }
-    if (session && !sessionBusy) {
-      html += '<div class="sh-code"><small>参加コード</small>' + QP.formatCode(session.code) + '</div>';
-    }
-    html += '</div>';
-    if (phase === 'judged') {
-      var cd = correctDisplay(q);
-      if (cd) html += '<div class="sh-correct"><span>正解</span>' + esc(cd) + '</div>';
-    }
-    el.innerHTML = html;
-    renderTimer();
-  }
-
-  // ---- パネル ----
-  var panelEls = new Map();
+  // ---- パネル表示（描画は js/stage.js。表示用ページ board.html にも同じものを送る） ----
+  var stage = null;
   var stampWave = 0;
-  var lastLayout = '';
+  var rankWave = 0;
 
-  function createPanel(pid) {
-    var el = document.createElement('div');
-    el.className = 'panel';
-    el.dataset.pid = pid;
-    el.innerHTML =
-      '<div class="flip">' +
-        '<div class="face back"><div class="back-inner"><div class="lamp"></div><div class="pnum"></div><div class="back-label"></div></div></div>' +
-        '<div class="face front"><div class="board-inner"></div></div>' +
-      '</div>' +
-      '<div class="stamp"></div>' +
-      '<div class="plate"><span class="pname"></span><span class="pscore"></span><span class="poff" title="通信が切れています">●</span></div>';
-    return el;
-  }
-
-  function renderBoard() {
-    var grid = $('#board');
-    var wrap = $('#boardWrap');
-    var ids = playerIds();
+  // ステージに渡す表示用データ。回答の中身は開いたパネルの分だけ入れる
+  function buildView() {
     var q = curQ();
     var r = curRound();
     var phase = curPhase();
     var sc = scores();
-
-    panelEls.forEach(function (el, pid) {
-      if (!game.players[pid]) { el.remove(); panelEls.delete(pid); }
-    });
-
-    var needFit = [];
-    ids.forEach(function (pid, i) {
-      var el = panelEls.get(pid);
-      if (!el) { el = createPanel(pid); panelEls.set(pid, el); }
-      if (grid.children[i] !== el) grid.insertBefore(el, grid.children[i] || null);
-      if (updatePanel(el, pid, i, q, r, phase, sc)) needFit.push(el);
-    });
-
-    var empty = $('#boardEmpty');
-    if (!ids.length) {
-      empty.hidden = false;
-      empty.innerHTML = joinCardHtml(true);
-      renderQr($('.join-qr', empty), 6);
-    } else {
-      empty.hidden = true;
-    }
-    wrap.classList.toggle('is-empty', !ids.length);
-    layoutBoard(needFit);
-    if (stageView === 'rank') renderRanking();
-  }
-
-  function updatePanel(el, pid, i, q, r, phase, sc) {
-    var p = game.players[pid];
-    var a = r && phase !== 'waiting' && phase !== 'final' ? r.answers[pid] : null;
-    var opened = !!(r && (phase === 'closed' || phase === 'judged') && r.opened[pid]);
-    var j = q && r && phase === 'judged' ? judgeOf(q, r, pid) : null;
-
-    el.classList.toggle('answered', !!a);
-    el.classList.toggle('opened', opened);
-    el.classList.toggle('offline', !isOnline(pid));
-    el.classList.toggle('clickable', !!(r && ((phase === 'closed' && !opened) || phase === 'judged')));
-    el.dataset.phase = phase;
-
-    $('.pnum', el).textContent = i + 1;
-    var bl = '';
-    if (phase === 'open') bl = a ? '回答済み' : '考え中…';
-    else if (phase === 'closed' || phase === 'judged') bl = a ? '' : '無回答';
-    $('.back-label', el).textContent = bl;
-    $('.pname', el).textContent = p.name;
-    $('.pscore', el).textContent = (sc[pid] || 0) + '点';
-
-    // 回答の中身（変わったときだけ書き換える）
-    var key = q && a ? q.id + ':' + a.s : (q && r && phase !== 'waiting' ? q.id + ':none' : '');
-    var fit = false;
-    if (el._key !== key) {
-      el._key = key;
-      var bi = $('.board-inner', el);
-      if (!q || !key) {
-        bi.innerHTML = '';
-      } else if (!a) {
-        bi.innerHTML = '<div class="ans-none">無回答</div>';
-      } else if (q.type === 'choice') {
-        bi.innerHTML = '<div class="ans-choice"><span class="cl c' + a.v + '">' + QP.choiceLabel(a.v) + '</span><span class="ct">' + esc(q.choices[a.v] || '') + '</span></div>';
-        fit = true;
-      } else if (q.type === 'draw') {
-        bi.innerHTML = QP.drawSvg(a.v, { width: 9 });
-      } else {
-        bi.innerHTML = '<div class="ans-text">' + esc(a.v) + '</div>';
-        fit = true;
+    var v = {
+      code: session ? session.code : '',
+      busy: sessionBusy || !session,
+      joinUrl: session ? joinUrl() : '',
+      phase: phase,
+      view: stageView,
+      final: !!game.final,
+      q: null,
+      dl: 0,
+      correctText: '',
+      counts: null,
+      stampWave: stampWave,
+      rankWave: rankWave,
+      players: []
+    };
+    if (q) {
+      v.q = {
+        id: q.id,
+        no: qIndex(q.id) + 1,
+        type: q.type,
+        text: phase === 'waiting' ? '' : q.text,
+        choices: q.type === 'choice' ? q.choices.slice() : [],
+        correct: phase === 'judged' ? q.correct.slice() : []
+      };
+      if (r && phase === 'open' && r.dl) v.dl = r.dl;
+      if (r && phase === 'judged') {
+        v.correctText = correctDisplay(q);
+        if (q.type === 'choice') {
+          v.counts = q.choices.map(function () { return 0; });
+          playerIds().forEach(function (pid) {
+            var a = r.answers[pid];
+            if (a && v.counts[a.v] != null) v.counts[a.v]++;
+          });
+        }
       }
     }
-
-    // ○×
-    var stamp = $('.stamp', el);
-    var sk = j === 1 ? 'ok' : (j === 0 ? 'ng' : '');
-    if (stamp._k !== sk) {
-      stamp._k = sk;
-      stamp.className = 'stamp' + (sk ? ' show ' + sk : '');
-      stamp.innerHTML = sk === 'ok'
-        ? '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="36" /></svg>'
-        : sk === 'ng' ? '<svg viewBox="0 0 100 100"><path d="M20 20 L80 80 M80 20 L20 80" /></svg>' : '';
-      if (sk && stampWave && now() - stampWave < 1500) {
-        stamp.style.animationDelay = (Math.min(i, 30) * 0.07) + 's';
-      } else {
-        stamp.style.animationDelay = '0s';
-      }
-    }
-    return fit;
+    playerIds().forEach(function (pid) {
+      var a = r && phase !== 'waiting' && phase !== 'final' ? r.answers[pid] : null;
+      var opened = !!(r && (phase === 'closed' || phase === 'judged') && r.opened[pid]);
+      v.players.push({
+        pid: pid,
+        name: game.players[pid].name,
+        score: sc[pid] || 0,
+        online: isOnline(pid),
+        answered: !!a,
+        opened: opened,
+        click: !!(r && ((phase === 'closed' && !opened) || phase === 'judged')),
+        ans: opened && a ? { k: q.id + ':' + a.s, v: a.v } : null,
+        j: q && r && phase === 'judged' ? judgeOf(q, r, pid) : null
+      });
+    });
+    return v;
   }
 
-  function layoutBoard(needFit) {
-    var wrap = $('#boardWrap');
-    var grid = $('#board');
-    var n = playerIds().length;
-    if (!n || wrap.hidden) { lastLayout = ''; return; }
-    var W = wrap.clientWidth;
-    var H = wrap.clientHeight;
-    if (!W || !H) {
-      // 見えていないときは測れないので、次に見えたときに全部合わせ直す
-      lastLayout = '';
+  function renderStage() {
+    if (!stage) return;
+    var v = buildView();
+    stage.render(v);
+    sendToBoards(v);
+  }
+
+  // ---- 表示用ページ（画面共有用）との連絡 ----
+  // 同じブラウザで開いた board.html に BroadcastChannel で表示用データを送る
+  var boardCh = null;
+  var boards = {};       // 表示用ページの id -> 最後に連絡があった時刻
+  var boardSentAt = 0;
+  var boardTimer = null;
+
+  function boardCount() {
+    var t = now();
+    return Object.keys(boards).filter(function (id) { return t - boards[id] < 6000; }).length;
+  }
+
+  function sendToBoards(v, force) {
+    if (!boardCh || !active || (!force && !boardCount())) return;
+    // 短い間に何度も描き直したときは、まとめて送る
+    var wait = 80 - (now() - boardSentAt);
+    if (wait > 0 && !force) {
+      if (!boardTimer) boardTimer = setTimeout(function () { boardTimer = null; sendToBoards(buildView(), true); }, wait);
       return;
     }
-    var gap = Math.round(Math.max(8, Math.min(W, H) * 0.018));
-    var pr = (5 / 3) / 1.24; // パネル全体の 横/縦（ボード 5:3 + 名札）
-    var best = { pw: 0, cols: 1 };
-    for (var c = 1; c <= n; c++) {
-      var rows = Math.ceil(n / c);
-      var pw = Math.min((W - gap * (c - 1)) / c, ((H - gap * (rows - 1)) / rows) * pr);
-      if (pw > best.pw) best = { pw: pw, cols: c };
-    }
-    var pwi = Math.max(60, Math.floor(best.pw));
-    var sig = pwi + 'x' + best.cols;
-    if (sig !== lastLayout) {
-      lastLayout = sig;
-      grid.style.setProperty('--pw', pwi + 'px');
-      grid.style.gridTemplateColumns = 'repeat(' + best.cols + ', ' + pwi + 'px)';
-      grid.style.gap = gap + 'px';
-      needFit = Array.from(panelEls.values());
-    }
-    (needFit || []).forEach(fitPanel);
+    boardSentAt = now();
+    try { boardCh.postMessage({ t: 'view', view: v || buildView() }); } catch (e) { /* ignore */ }
   }
 
-  function fitPanel(el) {
-    var bi = $('.board-inner', el);
-    var t = $('.ans-text', el);
-    if (t) QP.fitTextPreferOneLine(t, bi, 10, bi.clientHeight * 0.62);
-    var ct = $('.ans-choice .ct', el);
-    if (ct) {
-      // 選択肢の文字は下半分に収める
-      var box = { clientWidth: bi.clientWidth * 0.92, clientHeight: bi.clientHeight * 0.3 };
-      QP.fitText(ct, box, 8, bi.clientHeight * 0.2);
-    }
+  function setupBoardChannel() {
+    if (!('BroadcastChannel' in window)) return;
+    boardCh = new BroadcastChannel('quizpanel-board');
+    boardCh.onmessage = function (e) {
+      var m = e.data || {};
+      if (!active || typeof m.id !== 'string') return;
+      if (m.t === 'hello' || m.t === 'ping') {
+        var isNew = !boards[m.id] || now() - boards[m.id] >= 6000;
+        boards[m.id] = now();
+        if (m.t === 'hello' || isNew) {
+          sendToBoards(buildView(), true);
+          renderSoon('control');
+        }
+      } else if (m.t === 'bye') {
+        delete boards[m.id];
+        renderSoon('control');
+      } else if (m.t === 'click' && typeof m.pid === 'string') {
+        boards[m.id] = now();
+        handlePanelClick(m.pid);
+      } else if (m.t === 'key' && typeof m.key === 'string') {
+        boards[m.id] = now();
+        handleKey(m.key);
+      }
+    };
+    // 生きていることを知らせる（表示用ページはこれが途切れると「ホスト画面が見つかりません」と出す）
+    var lastCount = 0;
+    setInterval(function () {
+      var c = boardCount();
+      if (c) sendToBoards(buildView(), true);
+      if (c !== lastCount) { lastCount = c; renderSoon('control'); }
+    }, 2000);
   }
 
-  function renderRanking() {
-    var el = $('#ranking');
-    $('#boardWrap').hidden = true;
-    el.hidden = false;
-    var ids = playerIds();
-    var sc = scores();
-    var rk = QP.ranks(ids, function (pid) { return sc[pid] || 0; });
-    var title = game.final ? '最終結果' : '現在の順位';
-    var html = '<div class="rank-title">' + title + '</div>';
-    if (!ids.length) {
-      html += '<div class="rank-empty">参加者がいません</div>';
-    } else {
-      var n = rk.order.length;
-      var anim = rankWave && now() - rankWave < 1000;
-      html += '<ol class="rank-list' + (n > 10 ? ' dense' : '') + '">' + rk.order.map(function (pid, k) {
-        var r = rk.rank[pid];
-        var delay = anim ? Math.min(6, (n - 1 - k) * Math.min(0.35, 4 / n)) : 0;
-        return '<li class="rk' + (r <= 3 ? ' top' + r : '') + '" style="animation-delay:' + delay.toFixed(2) + 's">' +
-          '<span class="rk-no">' + r + '<small>位</small></span><span class="rk-name">' + esc(game.players[pid].name) + '</span>' +
-          '<span class="rk-pt">' + (sc[pid] || 0) + '<small>点</small></span></li>';
-      }).join('') + '</ol>';
+  function openBoardWindow() {
+    var w = window.open('board.html', 'quizpanel-board', 'popup=yes,width=1280,height=760');
+    if (!w) {
+      QP.toast('ポップアップがブロックされました。board.html を別のタブで開いてください', 5000);
+      return;
     }
-    if (el._html !== html) {
-      el._html = html;
-      el.innerHTML = html;
-    }
-    rankWave = 0;
-  }
-  var rankWave = 0;
-
-  function joinCardHtml(big) {
-    if (!session || sessionBusy) return '<div class="join-card"><div class="jc-title">参加コードを準備しています…</div></div>';
-    return '<div class="join-card' + (big ? ' big' : '') + '">' +
-      '<div class="jc-left"><div class="jc-title">スマホで参加してください</div>' +
-      '<div class="jc-code-label">参加コード</div><div class="jc-code">' + QP.formatCode(session.code) + '</div>' +
-      '<div class="jc-url">' + esc(joinUrl()) + '</div></div>' +
-      '<div class="join-qr"></div></div>';
+    try { w.focus(); } catch (e) { /* ignore */ }
   }
 
-  // ---- QR コード ----
-  var qrLoading = null;
-  function loadQr() {
-    if (typeof window.qrcode === 'function') return Promise.resolve();
-    if (!qrLoading) {
-      qrLoading = QP.loadFirst([
-        'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js',
-        'vendor/qrcode.js'
-      ], function () { return typeof window.qrcode === 'function'; });
-    }
-    return qrLoading;
-  }
-  function renderQr(el, cell) {
-    if (!el || !session) return;
-    loadQr().then(function () {
-      var qr = window.qrcode(0, 'M');
-      qr.addData(joinUrl());
-      qr.make();
-      el.innerHTML = qr.createSvgTag({ cellSize: cell || 6, margin: 2, scalable: true });
-    }).catch(function () {
-      el.innerHTML = '<div class="muted small">QRコードを表示できませんでした</div>';
-    });
+  function handlePanelClick(pid) {
+    var phase = curPhase();
+    var r = curRound();
+    if (!r || !game.players[pid]) return;
+    if (!r.opened[pid] && (phase === 'closed' || phase === 'judged')) openPanel(pid);
+    else if (phase === 'judged') toggleJudge(pid);
   }
 
   function showJoinModal() {
-    openModal('<div class="modal-join">' + joinCardHtml(true) +
+    openModal('<div class="modal-join">' + QP.joinCardHtml(session && session.code, joinUrl(), sessionBusy || !session, true) +
       '<div class="modal-actions"><button class="btn" data-act="copy-url">URLをコピー</button>' +
       '<button class="btn primary" data-act="close-modal">閉じる</button></div></div>', 'wide');
-    renderQr($('#modal .join-qr'), 8);
+    if (session && !sessionBusy) QP.renderQr($('#modal .join-qr'), joinUrl(), 8);
   }
 
   // ---- 全画面 ----
@@ -1228,8 +1096,7 @@
     } else if (document.fullscreenElement && document.exitFullscreen) {
       document.exitFullscreen().catch(function () { /* ignore */ });
     }
-    lastLayout = '';
-    setTimeout(function () { renderStageHead(); renderBoard(); }, 60);
+    setTimeout(function () { renderStage(); if (stage) stage.relayout(); }, 60);
     renderPresentBar();
   }
 
@@ -1326,7 +1193,6 @@
       saveNow();
       publishNow();
       renderControl();
-      renderBoard();
     }, structural ? 0 : 400);
     if (structural) renderQuestions();
   }
@@ -1571,6 +1437,19 @@
   // ------------------------------------------------------------------
   // イベント
   // ------------------------------------------------------------------
+  // 進行のキー操作（表示用ページで押したキーもここに届く）
+  function handleKey(k) {
+    if (!$('#modal').hidden) return false;
+    if (k === ' ' || k === 'Enter') primaryAction();
+    else if (k === 'a' || k === 'A') openAll();
+    else if (k === 'j' || k === 'J') announce();
+    else if (k === 'ArrowRight') moveQ(1);
+    else if (k === 'ArrowLeft') moveQ(-1);
+    else if (k === 'r' || k === 'R') toggleRank();
+    else return false;
+    return true;
+  }
+
   function bindEvents() {
     document.addEventListener('click', function (e) {
       var tb = e.target.closest('.tabs button');
@@ -1578,15 +1457,6 @@
         tab = tb.dataset.tab;
         renderTabs();
         renderAll();
-        return;
-      }
-      var panel = e.target.closest('.panel');
-      if (panel && $('#board').contains(panel)) {
-        var phase = curPhase();
-        var r = curRound();
-        if (!r) return;
-        if (!r.opened[panel.dataset.pid] && (phase === 'closed' || phase === 'judged')) openPanel(panel.dataset.pid);
-        else if (phase === 'judged') toggleJudge(panel.dataset.pid);
         return;
       }
       var btn = e.target.closest('[data-act]');
@@ -1607,6 +1477,7 @@
         case 'toggle-rank': toggleRank(); break;
         case 'toggle-answer': showAnswer = !showAnswer; renderControl(); break;
         case 'present': setPresenting(true); break;
+        case 'open-board': openBoardWindow(); break;
         case 'present-off': setPresenting(false); break;
         case 'sound': prefs.sound = !prefs.sound; saveSoon(); renderControl(); break;
         case 'goto-questions': tab = 'questions'; renderAll(); break;
@@ -1687,14 +1558,9 @@
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
       if (tab !== 'play' || e.ctrlKey || e.metaKey || e.altKey) return;
       var k = e.key;
-      if (k === ' ' || k === 'Enter') { e.preventDefault(); primaryAction(); }
-      else if (k === 'a' || k === 'A') openAll();
-      else if (k === 'j' || k === 'J') announce();
-      else if (k === 'ArrowRight') moveQ(1);
-      else if (k === 'ArrowLeft') moveQ(-1);
-      else if (k === 'f' || k === 'F') setPresenting(!presenting);
-      else if (k === 'r' || k === 'R') toggleRank();
+      if (k === 'f' || k === 'F') setPresenting(!presenting);
       else if (k === 'Escape' && presenting) setPresenting(false);
+      else if (handleKey(k)) e.preventDefault();
     });
 
     document.addEventListener('fullscreenchange', function () {
@@ -1705,7 +1571,7 @@
     var rt = null;
     window.addEventListener('resize', function () {
       clearTimeout(rt);
-      rt = setTimeout(function () { lastLayout = ''; renderBoard(); }, 120);
+      rt = setTimeout(function () { if (stage) stage.relayout(); }, 120);
     });
 
     $('#btnQr').addEventListener('click', showJoinModal);
@@ -1745,6 +1611,7 @@
     saveNow();
     active = false;
     if (net) net.stop();
+    if (boardCh) { try { boardCh.close(); } catch (e) { /* ignore */ } boardCh = null; }
     fatal('<p>別のタブでホスト画面が使われ始めたため、このタブは停止しました。</p>' +
       '<button class="btn primary" onclick="location.reload()">このタブで再開する</button>');
   }
@@ -1759,6 +1626,8 @@
     }).then(function () {
       active = true;
       loadAll();
+      stage = new QP.Stage($('#stage'), { onPanelClick: handlePanelClick });
+      setupBoardChannel();
       if (session && now() - (session.act || session.created || 0) > QP.TTL_MS) {
         // 時間切れのセッション。古いコードの保持データは新しいコードを決めるときに消す
         game = newGame();
@@ -1781,7 +1650,7 @@
       setInterval(function () { renderSoon('header'); }, 5000);
       window.addEventListener('pagehide', saveNow);
       if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(function () { lastLayout = ''; renderBoard(); });
+        document.fonts.ready.then(function () { if (stage) stage.relayout(); });
       }
       pokeIdle();
     }).catch(function (err) {
@@ -1794,7 +1663,8 @@
   // テスト用に一部を公開
   window.QP_HOST = {
     get state() { return { questions: questions, session: session, game: game, online: online }; },
-    buildState: function () { return buildState(); }
+    buildState: function () { return buildState(); },
+    buildView: function () { return buildView(); }
   };
 
   boot();
