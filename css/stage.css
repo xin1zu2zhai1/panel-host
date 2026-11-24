@@ -144,6 +144,7 @@
 .pscore { font-weight: 900; font-size: calc(var(--pw) * .06); color: var(--gold2); white-space: nowrap; }
 .poff { display: none; color: #ff5d5d; font-size: calc(var(--pw) * .05); }
 .panel.offline .poff { display: inline; }
+.stage[data-mode=survey] .pscore { display: none; }
 .panel.offline:not(.opened) .face.back { filter: saturate(.4) brightness(.75); }
 
 /* ---------- 参加の案内 ---------- */

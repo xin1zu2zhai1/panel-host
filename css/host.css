@@ -58,6 +58,9 @@ textarea { resize: vertical; }
   background: linear-gradient(135deg, var(--gold2), #f08a00); color: #2a1300; font-weight: 900;
 }
 .brand small { font-size: 12px; color: var(--muted); margin-left: 6px; font-weight: 700; }
+.mode-badge { font-size: 12px; font-weight: 900; padding: 2px 10px; border-radius: 999px; background: #2a3368; color: #cfd6ff; }
+.mode-badge.survey { background: #0f6b5c; color: #d6fff5; }
+.mode-opt { display: flex; margin: 6px 0; font-size: 14px; white-space: normal; }
 .joininfo {
   display: flex; align-items: baseline; gap: 10px; background: #111a45; border: 1px solid #2c3a7d;
   padding: 6px 14px; border-radius: 12px; cursor: pointer;

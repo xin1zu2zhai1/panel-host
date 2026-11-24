@@ -5,6 +5,7 @@
  * view の形:
  *  {
  *    code, busy, joinUrl,                 参加コード（busy のときは準備中）
+ *    survey,                              アンケートモード（得点・○×・正解を出さない）
  *    phase: waiting|open|closed|judged|final, view: board|rank, final,
  *    q: null | {id, no, type, text, choices, correct},
  *    dl, correctText, counts,             制限時間の締め切り・正解・選択肢ごとの人数
@@ -83,6 +84,7 @@
     this.view = view;
     this.root.dataset.phase = view.phase;
     this.root.dataset.view = view.view;
+    this.root.dataset.mode = view.survey ? 'survey' : 'quiz';
     var rank = view.view === 'rank';
     this.rankEl.hidden = !rank;
     this.wrap.hidden = rank;
@@ -118,7 +120,7 @@
     } else if (!q) {
       html = '<div class="sh-main"><div class="sh-text">問題を登録してください</div></div>';
     } else {
-      html = '<div class="sh-main"><div class="sh-no">第' + q.no + '問</div>';
+      html = '<div class="sh-main"><div class="sh-no">' + (v.survey ? '質問' + q.no : '第' + q.no + '問') + '</div>';
       if (v.phase === 'waiting') {
         html += '<div class="sh-text sh-wait">まもなく出題します</div>';
       } else {

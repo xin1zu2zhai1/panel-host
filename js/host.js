@@ -37,6 +37,10 @@
   var showAnswer = false;
   var conflictAt = 0;
 
+  // アンケートモード: 正解・○×・得点・順位を使わず、回答を表示するだけ
+  function isSurvey() { return prefs.mode === 'survey'; }
+  function qLabel(no) { return isSurvey() ? '質問' + no : '第' + no + '問'; }
+
   function newGame() {
     return { cur: null, final: false, rounds: {}, players: {}, kicked: {} };
   }
@@ -47,6 +51,14 @@
       { id: qid(), type: 'choice', text: '1年でいちばん昼が長い日は？', choices: ['春分', '夏至', '秋分', '冬至'], correct: [1], answer: '', pts: 10, lim: 20 },
       { id: qid(), type: 'text', text: '1ダースはいくつ？（数字で）', answer: '12\n12個\n十二', choices: [], correct: [], pts: 10, lim: 0 },
       { id: qid(), type: 'draw', text: 'パンダの絵を描いてください', answer: '', choices: [], correct: [], pts: 10, lim: 60 }
+    ];
+  }
+
+  function sampleSurvey() {
+    return [
+      { id: qid(), type: 'text', text: '好きな食べ物は？', answer: '', choices: [], correct: [], pts: 10, lim: 0 },
+      { id: qid(), type: 'choice', text: '今日の気分は？', choices: ['最高！', 'まあまあ', 'ふつう', 'いまいち'], correct: [], answer: '', pts: 10, lim: 0 },
+      { id: qid(), type: 'draw', text: 'いまの気持ちを絵で描いてください', answer: '', choices: [], correct: [], pts: 10, lim: 0 }
     ];
   }
 
@@ -64,6 +76,7 @@
     game.kicked = game.kicked || {};
     prefs = QP.store.get('host:prefs', null) || {};
     if (prefs.sound == null) prefs.sound = true;
+    if (prefs.mode !== 'survey') prefs.mode = 'quiz';
     recentCodes = QP.store.get('host:recent', []);
     if (!Array.isArray(recentCodes)) recentCodes = [];
     fixCur();
@@ -233,16 +246,17 @@
       act: session.act,
       ph: phase,
       total: questions.length,
-      pl: ids,
-      sc: scores()
+      pl: ids
     };
+    if (isSurvey()) st.mode = 'survey';
+    else st.sc = scores();
     if (q) {
       st.q = { id: q.id, no: qIndex(q.id) + 1 };
       if (phase === 'open' || phase === 'closed' || phase === 'judged') {
         st.q.r = r.openedAt || 1;
         st.q.text = q.text;
         st.q.type = q.type;
-        st.q.pts = q.pts;
+        if (!isSurvey()) st.q.pts = q.pts;
         if (q.type === 'choice') st.q.ch = q.choices;
       }
     }
@@ -256,7 +270,7 @@
       st.dl = r.dl;
       st.rem = Math.max(0, r.dl - now());
     }
-    if (r && phase === 'judged') {
+    if (r && phase === 'judged' && !isSurvey()) {
       st.res = {};
       ids.forEach(function (pid) {
         var j = judgeOf(q, r, pid);
@@ -549,6 +563,7 @@
   }
 
   function announce() {
+    if (isSurvey()) return;
     var q = curQ();
     var r = curRound();
     if (!q || !r || r.phase !== 'closed') return;
@@ -562,6 +577,7 @@
   }
 
   function toggleJudge(pid) {
+    if (isSurvey()) return;
     var q = curQ();
     var r = curRound();
     if (!q || !r || r.phase !== 'judged') return;
@@ -601,7 +617,7 @@
   function redoRound() {
     var q = curQ();
     if (!q) return;
-    ask('第' + (qIndex(q.id) + 1) + '問の回答と判定を消して、出題前に戻しますか？', '出題前に戻す').then(function (ok) {
+    ask(qLabel(qIndex(q.id) + 1) + 'の回答と判定を消して、出題前に戻しますか？', '出題前に戻す').then(function (ok) {
       if (!ok) return;
       game.rounds[q.id] = { phase: 'waiting', answers: {}, opened: {}, override: {}, dl: 0 };
       commit();
@@ -609,6 +625,7 @@
   }
 
   function showFinal() {
+    if (isSurvey()) return;
     var r = curRound();
     if (r && r.phase === 'open') {
       r.phase = 'closed';
@@ -629,6 +646,7 @@
 
   function toggleRank() {
     if (game.final) { hideFinal(); return; }
+    if (isSurvey()) return;
     stageView = stageView === 'rank' ? 'board' : 'rank';
     rankWave = stageView === 'rank' ? now() : 0;
     renderControl();
@@ -643,6 +661,7 @@
       var ids = playerIds();
       var unopened = ids.filter(function (pid) { return !r.opened[pid]; });
       if (unopened.length) return openNext();
+      if (isSurvey()) return moveQ(1);
       return announce();
     }
     if (phase === 'judged') {
@@ -660,10 +679,13 @@
     if (phase === 'open') return '締め切る';
     if (phase === 'closed') {
       var unopened = playerIds().filter(function (pid) { return !r.opened[pid]; });
-      return unopened.length ? '次のパネルを開く' : '正解発表';
+      if (unopened.length) return '次のパネルを開く';
+      if (isSurvey()) return qIndex(game.cur) < questions.length - 1 ? '次の質問へ' : '';
+      return '正解発表';
     }
     if (phase === 'judged') {
-      return qIndex(game.cur) < questions.length - 1 ? '次の問題へ' : '最終結果発表';
+      if (qIndex(game.cur) < questions.length - 1) return isSurvey() ? '次の質問へ' : '次の問題へ';
+      return isSurvey() ? '' : '最終結果発表';
     }
     return '';
   }
@@ -786,6 +808,8 @@
 
   function renderHeader() {
     $('#code').textContent = session && !sessionBusy ? QP.formatCode(session.code) : '準備中…';
+    $('#modeBadge').textContent = isSurvey() ? 'アンケート' : 'クイズ';
+    $('#modeBadge').className = 'mode-badge' + (isSurvey() ? ' survey' : '');
     var up = netStatus.filter(function (s) { return s.state === 'connected'; }).length;
     var lamps = netStatus.map(function (s) {
       return '<span class="lamp-dot ' + s.state + '" title="' + esc(s.name + '：' + stateLabel(s.state)) + '"></span>';
@@ -840,7 +864,7 @@
       '<select id="qSelect">' + opts + '</select>' +
       '<button class="btn icon" data-act="next" title="次の問題（→）"' + (i >= questions.length - 1 ? ' disabled' : '') + '>▶</button></div>';
     html += '<div class="ctl-phase ph-' + phase + '">' + PHASE_LABEL[phase] + '</div>';
-    html += '<div class="ctl-qcard"><div class="ctl-qno">第' + (i + 1) + '問 <small>' + typeLabel(q.type) + '・' + q.pts + '点' +
+    html += '<div class="ctl-qcard"><div class="ctl-qno">' + qLabel(i + 1) + ' <small>' + typeLabel(q.type) + (isSurvey() ? '' : '・' + q.pts + '点') +
       (q.lim ? '・' + q.lim + '秒' : '') + '</small></div>';
     html += '<div class="ctl-qtext">' + (esc(q.text) || '<span class="muted">（問題文なし）</span>') + '</div>';
     if (q.type === 'choice') {
@@ -849,7 +873,7 @@
       }).join('') + '</ol>';
     }
     var cd = correctDisplay(q);
-    html += '<div class="ctl-answer">' + (showAnswer
+    if (!isSurvey()) html += '<div class="ctl-answer">' + (showAnswer
       ? '<div class="ans-reveal"><small>正解</small> ' + (cd ? esc(cd) : '<span class="muted">未設定（手動で判定）</span>') +
         (q.type === 'text' && QP.splitAnswers(q.answer).length > 1 ? '<div class="muted small">別解: ' + esc(QP.splitAnswers(q.answer).slice(1).join('、')) + '</div>' : '') +
         ' <button class="link" data-act="toggle-answer">隠す</button></div>'
@@ -866,9 +890,9 @@
       if (label) html += '<button class="btn big primary" data-act="primary">' + label + ' <kbd>Space</kbd></button>';
       if (phase === 'closed') {
         html += '<div class="row"><button class="btn" data-act="open-all">一斉オープン <kbd>A</kbd></button>' +
-          '<button class="btn" data-act="announce">正解発表 <kbd>J</kbd></button></div>';
+          (isSurvey() ? '' : '<button class="btn" data-act="announce">正解発表 <kbd>J</kbd></button>') + '</div>';
       }
-      if (phase === 'judged') {
+      if (phase === 'judged' && !isSurvey()) {
         html += '<div class="hint">パネルをクリックすると ○ と × を切り替えられます</div>';
       }
     }
@@ -877,12 +901,16 @@
     html += '<div class="ctl-sub">';
     html += '<button class="btn small" data-act="present">全画面で表示 <kbd>F</kbd></button>';
     html += boardButtonHtml();
-    html += '<button class="btn small" data-act="toggle-rank">' + (stageView === 'rank' && !game.final ? 'パネルに戻る' : '順位を表示') + ' <kbd>R</kbd></button>';
-    if (phase !== 'final') html += '<button class="btn small" data-act="final">最終結果発表</button>';
+    if (!isSurvey()) {
+      html += '<button class="btn small" data-act="toggle-rank">' + (stageView === 'rank' && !game.final ? 'パネルに戻る' : '順位を表示') + ' <kbd>R</kbd></button>';
+      if (phase !== 'final') html += '<button class="btn small" data-act="final">最終結果発表</button>';
+    }
     if (phase !== 'waiting' && phase !== 'final') html += '<button class="btn small ghost" data-act="redo">この問題をやり直す</button>';
     html += '<button class="btn small ghost" data-act="sound">' + (prefs.sound ? '🔊 効果音あり' : '🔇 効果音なし') + '</button>';
     html += '</div>';
-    html += '<div class="ctl-keys">キー操作：Space 次へ ／ A 一斉オープン ／ J 正解発表 ／ ← → 問題の切替 ／ R 順位 ／ F 全画面</div>';
+    html += isSurvey()
+      ? '<div class="ctl-keys">アンケートモード（正解・得点なし）／ キー操作：Space 次へ ／ A 一斉オープン ／ ← → 質問の切替 ／ F 全画面</div>'
+      : '<div class="ctl-keys">キー操作：Space 次へ ／ A 一斉オープン ／ J 正解発表 ／ ← → 問題の切替 ／ R 順位 ／ F 全画面</div>';
 
     el.innerHTML = html;
     renderProgress();
@@ -945,6 +973,7 @@
       code: session ? session.code : '',
       busy: sessionBusy || !session,
       joinUrl: session ? joinUrl() : '',
+      survey: isSurvey(),
       phase: phase,
       view: stageView,
       final: !!game.final,
@@ -966,8 +995,10 @@
         correct: phase === 'judged' ? q.correct.slice() : []
       };
       if (r && phase === 'open' && r.dl) v.dl = r.dl;
-      if (r && phase === 'judged') {
-        v.correctText = correctDisplay(q);
+      // 選択式の人数: クイズは正解発表のとき、アンケートは全員のパネルを開いたとき
+      var allOpen = r && (phase === 'closed' || phase === 'judged') && playerIds().every(function (pid) { return r.opened[pid]; });
+      if (r && (isSurvey() ? allOpen : phase === 'judged')) {
+        if (!isSurvey()) v.correctText = correctDisplay(q);
         if (q.type === 'choice') {
           v.counts = q.choices.map(function () { return 0; });
           playerIds().forEach(function (pid) {
@@ -987,9 +1018,9 @@
         online: isOnline(pid),
         answered: !!a,
         opened: opened,
-        click: !!(r && ((phase === 'closed' && !opened) || phase === 'judged')),
+        click: !!(r && ((phase === 'closed' && !opened) || (phase === 'judged' && !isSurvey()))),
         ans: opened && a ? { k: q.id + ':' + a.s, v: a.v } : null,
-        j: q && r && phase === 'judged' ? judgeOf(q, r, pid) : null
+        j: q && r && phase === 'judged' && !isSurvey() ? judgeOf(q, r, pid) : null
       });
     });
     return v;
@@ -1108,8 +1139,8 @@
     var html = '';
     if (phase === 'final') html += '<button class="btn" data-act="hide-final">パネルに戻る</button>';
     else if (label) html += '<button class="btn primary" data-act="primary">' + label + '</button>';
-    if (phase === 'closed') html += '<button class="btn" data-act="open-all">一斉オープン</button><button class="btn" data-act="announce">正解発表</button>';
-    html += '<button class="btn" data-act="toggle-rank">' + (stageView === 'rank' && !game.final ? 'パネル' : '順位') + '</button>';
+    if (phase === 'closed') html += '<button class="btn" data-act="open-all">一斉オープン</button>' + (isSurvey() ? '' : '<button class="btn" data-act="announce">正解発表</button>');
+    if (!isSurvey()) html += '<button class="btn" data-act="toggle-rank">' + (stageView === 'rank' && !game.final ? 'パネル' : '順位') + '</button>';
     html += '<button class="btn ghost" data-act="present-off">全画面を終了</button>';
     el.innerHTML = html;
   }
@@ -1131,7 +1162,9 @@
       '<button class="btn ghost" data-act="q-sample">サンプルを追加</button>' +
       '<button class="btn ghost danger" data-act="q-clear">すべて削除</button>' +
       '</div>';
-    html += '<p class="muted small">入力した内容は自動で保存されます。記述問題の正解は、改行で区切ると別解も正解にできます（全角・半角、ひらがな・カタカナ、大文字・小文字、空白の違いは同じとみなします）。</p>';
+    html += isSurvey()
+      ? '<p class="muted small">アンケートモードです。正解と配点は使わず、回答をパネルに表示するだけです（設定タブでクイズモードに戻せます）。入力した内容は自動で保存されます。</p>'
+      : '<p class="muted small">入力した内容は自動で保存されます。記述問題の正解は、改行で区切ると別解も正解にできます（全角・半角、ひらがな・カタカナ、大文字・小文字、空白の違いは同じとみなします）。</p>';
     if (!questions.length) {
       html += '<div class="q-empty">問題がありません。「＋ 問題を追加」から作りましょう。</div>';
     }
@@ -1146,13 +1179,14 @@
     var status = asked ? '<span class="q-status">' + PHASE_LABEL[r.phase] + '</span>' : '';
     var lock = asked ? ' disabled title="出題済みの問題は形式や選択肢の数を変えられません（進行画面で「この問題をやり直す」と変更できます）"' : '';
     var h = '<div class="qcard' + (q.id === game.cur ? ' current' : '') + '" data-id="' + q.id + '">';
-    h += '<div class="qhead"><span class="qno">第' + (i + 1) + '問</span>' + status +
+    var sv = isSurvey();
+    h += '<div class="qhead"><span class="qno">' + qLabel(i + 1) + '</span>' + status +
       '<select data-f="type"' + lock + '>' +
       '<option value="text"' + (q.type === 'text' ? ' selected' : '') + '>記述（文字で回答）</option>' +
       '<option value="choice"' + (q.type === 'choice' ? ' selected' : '') + '>選択式</option>' +
       '<option value="draw"' + (q.type === 'draw' ? ' selected' : '') + '>手書き（フリップ）</option>' +
       '</select>' +
-      '<label class="num">配点 <input type="number" data-f="pts" min="0" max="1000" value="' + q.pts + '"> 点</label>' +
+      (sv ? '' : '<label class="num">配点 <input type="number" data-f="pts" min="0" max="1000" value="' + q.pts + '"> 点</label>') +
       '<label class="num">制限時間 <input type="number" data-f="lim" min="0" max="600" value="' + q.lim + '"> 秒</label>' +
       '<span class="spacer"></span>' +
       '<button class="btn icon small" data-act="q-up" title="上へ"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
@@ -1163,20 +1197,20 @@
       '</div>';
     h += '<textarea data-f="text" rows="2" maxlength="400" placeholder="問題文を入力">' + esc(q.text) + '</textarea>';
     if (q.type === 'text') {
-      h += '<label class="qlabel">正解（別解は改行で区切る。空欄なら手動で判定）</label>' +
+      if (!sv) h += '<label class="qlabel">正解（別解は改行で区切る。空欄なら手動で判定）</label>' +
         '<textarea data-f="answer" rows="2" maxlength="400" placeholder="例：富士山&#10;ふじさん">' + esc(q.answer) + '</textarea>';
     } else if (q.type === 'choice') {
-      h += '<label class="qlabel">選択肢（正解にチェック。複数可・なしなら手動で判定）</label><div class="qchoices">';
+      h += '<label class="qlabel">' + (sv ? '選択肢' : '選択肢（正解にチェック。複数可・なしなら手動で判定）') + '</label><div class="qchoices">';
       q.choices.forEach(function (c, k) {
-        h += '<div class="qchoice"><label class="chk"><input type="checkbox" data-f="correct" data-i="' + k + '"' +
-          (q.correct.indexOf(k) >= 0 ? ' checked' : '') + '> 正解</label>' +
+        h += '<div class="qchoice">' + (sv ? '' : '<label class="chk"><input type="checkbox" data-f="correct" data-i="' + k + '"' +
+          (q.correct.indexOf(k) >= 0 ? ' checked' : '') + '> 正解</label>') +
           '<span class="cl c' + k + '">' + QP.choiceLabel(k) + '</span>' +
           '<input type="text" data-f="choice" data-i="' + k + '" maxlength="80" value="' + esc(c) + '" placeholder="選択肢' + QP.choiceLabel(k) + '">' +
           '<button class="btn icon small" data-act="q-delchoice" data-i="' + k + '"' + (q.choices.length <= 2 || asked ? ' disabled' : ' title="この選択肢を削除"') + '>×</button></div>';
       });
       h += '</div>';
       if (q.choices.length < 6 && !asked) h += '<button class="btn small" data-act="q-addchoice">＋ 選択肢を追加</button>';
-    } else {
+    } else if (!sv) {
       h += '<label class="qlabel">模範解答（正解発表のときに表示。判定はパネルをクリックして手動で行います）</label>' +
         '<input type="text" data-f="answer" maxlength="100" value="' + esc(q.answer) + '" placeholder="空欄でもかまいません">';
     }
@@ -1242,7 +1276,7 @@
       return;
     }
     if (act === 'q-sample') {
-      sampleQuestions().forEach(function (s) { questions.push(s); });
+      (isSurvey() ? sampleSurvey() : sampleQuestions()).forEach(function (s) { questions.push(s); });
       questionsChanged(true);
       return;
     }
@@ -1335,7 +1369,8 @@
     if (!ids.length) {
       html += '<div class="q-empty">まだ誰も参加していません。参加コード <b>' + (session ? QP.formatCode(session.code) : '') + '</b> を伝えてください。</div>';
     } else {
-      html += '<table class="ptable"><thead><tr><th>#</th><th>名前</th><th>接続</th><th>順位</th><th>得点</th><th>この問題</th><th></th></tr></thead><tbody>';
+      var sv = isSurvey();
+      html += '<table class="ptable"><thead><tr><th>#</th><th>名前</th><th>接続</th>' + (sv ? '' : '<th>順位</th><th>得点</th>') + '<th>' + (sv ? 'この質問' : 'この問題') + '</th><th></th></tr></thead><tbody>';
       ids.forEach(function (pid, i) {
         var p = game.players[pid];
         var o = online[pid] || {};
@@ -1345,7 +1380,7 @@
         var a = r && r.phase !== 'waiting' ? r.answers[pid] : null;
         html += '<tr' + (isOnline(pid) ? '' : ' class="off"') + '><td>' + (i + 1) + '</td><td class="nm">' + esc(p.name) + '</td>' +
           '<td><span class="net-lamps">' + dots + '</span> ' + (isOnline(pid) ? '<span class="ok">接続中</span>' : '<span class="ng">切断</span>') + '</td>' +
-          '<td>' + rk.rank[pid] + '位</td><td>' + (sc[pid] || 0) + '点</td>' +
+          (sv ? '' : '<td>' + rk.rank[pid] + '位</td><td>' + (sc[pid] || 0) + '点</td>') +
           '<td class="ans">' + (a ? esc(answerText(q, a)) : '<span class="muted">—</span>') + '</td>' +
           '<td><button class="btn small danger" data-act="kick" data-pid="' + pid + '">外す</button></td></tr>';
       });
@@ -1367,10 +1402,25 @@
     });
   }
 
+  function setMode(mode) {
+    prefs.mode = mode === 'survey' ? 'survey' : 'quiz';
+    if (isSurvey()) {
+      game.final = false;
+      stageView = 'board';
+    }
+    QP.toast(isSurvey() ? 'アンケートモードにしました' : 'クイズモードにしました');
+    commit();
+  }
+
   // ---- 設定 ----
   function renderSettings() {
     var el = $('#tab-settings');
     var html = '<div class="set-grid">';
+    html += '<div class="set-card"><h3>モード</h3>' +
+      '<label class="chk mode-opt"><input type="radio" name="prefMode" value="quiz"' + (isSurvey() ? '' : ' checked') + '> <b>クイズ</b>：正解発表・○×・得点・順位あり</label>' +
+      '<label class="chk mode-opt"><input type="radio" name="prefMode" value="survey"' + (isSurvey() ? ' checked' : '') + '> <b>アンケート</b>：回答を表示するだけ（正解・得点なし）</label>' +
+      '<p class="muted small">途中で切り替えてもかまいません。回答者の画面もすぐに切り替わります。</p></div>';
+
     html += '<div class="set-card"><h3>参加コード</h3><div class="set-code">' + (session && !sessionBusy ? QP.formatCode(session.code) : '準備中…') + '</div>' +
       '<p class="muted small">コードを変えると、いまの参加者はいったん参加画面に戻ります（得点もリセットされます）。操作のない状態が' + CFG.SESSION_TTL_HOURS + '時間続くと自動で新しいコードになります。</p>' +
       '<button class="btn" data-act="newcode"' + (sessionBusy ? ' disabled' : '') + '>新しいコードに変更</button></div>';
@@ -1531,6 +1581,10 @@
       if (e.target.id === 'qImport' && e.target.files[0]) {
         importQuestions(e.target.files[0]);
         e.target.value = '';
+        return;
+      }
+      if (e.target.name === 'prefMode') {
+        setMode(e.target.value);
         return;
       }
       if (e.target.id === 'prefSound') {
