@@ -974,6 +974,11 @@
       busy: sessionBusy || !session,
       joinUrl: session ? joinUrl() : '',
       survey: isSurvey(),
+      // まだ一度も出題していない間は、表示用ページなどに参加コードと QR コードを出し続ける
+      lobby: !game.final && !questions.some(function (qq) {
+        var rr = game.rounds[qq.id];
+        return rr && rr.phase !== 'waiting';
+      }),
       phase: phase,
       view: stageView,
       final: !!game.final,

@@ -6,6 +6,7 @@
  *  {
  *    code, busy, joinUrl,                 参加コード（busy のときは準備中）
  *    survey,                              アンケートモード（得点・○×・正解を出さない）
+ *    lobby,                               まだ一度も出題していない（参加コードと QR コードを出し続ける）
  *    phase: waiting|open|closed|judged|final, view: board|rank, final,
  *    q: null | {id, no, type, text, choices, correct},
  *    dl, correctText, counts,             制限時間の締め切り・正解・選択肢ごとの人数
@@ -185,19 +186,54 @@
       if (self.updatePanel(el, p, i)) needFit.push(el);
     });
 
-    if (!v.players.length) {
+    // 最初の出題までは（参加者がいても）参加コードと QR コードを出し続け、参加した人の名前を並べる
+    var lobby = !!v.lobby || !v.players.length;
+    if (lobby) {
       this.empty.hidden = false;
       var key = v.busy ? 'busy' : v.code + '|' + v.joinUrl;
       if (this._emptyKey !== key) {
         this._emptyKey = key;
-        this.empty.innerHTML = QP.joinCardHtml(v.code, v.joinUrl, v.busy, true);
+        this.empty.innerHTML = '<div class="lobby">' + QP.joinCardHtml(v.code, v.joinUrl, v.busy, true) +
+          '<div class="lobby-people"><div class="lp-title"></div><div class="lp-names"></div></div></div>';
+        this.chips = new Map();
         if (!v.busy) QP.renderQr($('.join-qr', this.empty), v.joinUrl, 6);
       }
+      this.renderLobbyPeople();
     } else {
       this.empty.hidden = true;
     }
-    this.wrap.classList.toggle('is-empty', !v.players.length);
+    this.wrap.classList.toggle('is-empty', lobby);
     this.layout(needFit);
+  };
+
+  // 参加した人の名前（新しく参加した人だけ、ぽんと出す）
+  Stage.prototype.renderLobbyPeople = function () {
+    var self = this;
+    var people = $('.lobby-people', this.empty);
+    if (!people) return;
+    var players = this.view.players;
+    var title = players.length ? '参加者 <b>' + players.length + '</b> 人' : '参加を待っています…';
+    var t = $('.lp-title', people);
+    if (t.innerHTML !== title) t.innerHTML = title;
+    people.classList.toggle('many', players.length > 24);
+    var box = $('.lp-names', people);
+    var ids = {};
+    players.forEach(function (p) { ids[p.pid] = true; });
+    this.chips.forEach(function (el, pid) {
+      if (!ids[pid]) { el.remove(); self.chips.delete(pid); }
+    });
+    players.forEach(function (p, i) {
+      var el = self.chips.get(p.pid);
+      if (!el) {
+        el = document.createElement('span');
+        el.className = 'lp-chip new';
+        el.addEventListener('animationend', function () { el.classList.remove('new'); });
+        self.chips.set(p.pid, el);
+      }
+      if (box.children[i] !== el) box.insertBefore(el, box.children[i] || null);
+      if (el.textContent !== p.name) el.textContent = p.name;
+      el.classList.toggle('off', !p.online);
+    });
   };
 
   Stage.prototype.updatePanel = function (el, p, i) {
