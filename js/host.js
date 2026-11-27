@@ -660,7 +660,7 @@
     if (phase === 'closed') {
       var ids = playerIds();
       var unopened = ids.filter(function (pid) { return !r.opened[pid]; });
-      if (unopened.length) return openNext();
+      if (unopened.length) return openAll();
       if (isSurvey()) return moveQ(1);
       return announce();
     }
@@ -679,7 +679,7 @@
     if (phase === 'open') return '締め切る';
     if (phase === 'closed') {
       var unopened = playerIds().filter(function (pid) { return !r.opened[pid]; });
-      if (unopened.length) return '次のパネルを開く';
+      if (unopened.length) return '回答オープン';
       if (isSurvey()) return qIndex(game.cur) < questions.length - 1 ? '次の質問へ' : '';
       return '正解発表';
     }
@@ -888,12 +888,17 @@
       html += '<button class="btn big" data-act="hide-final">パネル表示に戻る</button>';
     } else {
       if (label) html += '<button class="btn big primary" data-act="primary">' + label + ' <kbd>Space</kbd></button>';
-      if (phase === 'closed') {
-        html += '<div class="row"><button class="btn" data-act="open-all">一斉オープン <kbd>A</kbd></button>' +
+      if (phase === 'closed' && label === '回答オープン') {
+        html += '<div class="row"><button class="btn" data-act="open-next">1枚ずつ開く <kbd>N</kbd></button>' +
           (isSurvey() ? '' : '<button class="btn" data-act="announce">正解発表 <kbd>J</kbd></button>') + '</div>';
       }
       if (phase === 'judged' && !isSurvey()) {
         html += '<div class="hint">パネルをクリックすると ○ と × を切り替えられます</div>';
+      }
+      if (phase === 'open') {
+        html += '<div class="hint">回答は「回答オープン」を押すまで表示されません（届いたかどうかだけランプでわかります）</div>';
+      } else if (phase === 'closed' && primaryLabel() === '回答オープン') {
+        html += '<div class="hint">パネルをクリックすると、その人の回答だけを開けます</div>';
       }
     }
     html += '</div>';
@@ -909,8 +914,8 @@
     html += '<button class="btn small ghost" data-act="sound">' + (prefs.sound ? '🔊 効果音あり' : '🔇 効果音なし') + '</button>';
     html += '</div>';
     html += isSurvey()
-      ? '<div class="ctl-keys">アンケートモード（正解・得点なし）／ キー操作：Space 次へ ／ A 一斉オープン ／ ← → 質問の切替 ／ F 全画面</div>'
-      : '<div class="ctl-keys">キー操作：Space 次へ ／ A 一斉オープン ／ J 正解発表 ／ ← → 問題の切替 ／ R 順位 ／ F 全画面</div>';
+      ? '<div class="ctl-keys">アンケートモード（正解・得点なし）／ キー操作：Space 次へ ／ A 回答オープン ／ N 1枚ずつ開く ／ ← → 質問の切替 ／ F 全画面</div>'
+      : '<div class="ctl-keys">キー操作：Space 次へ ／ A 回答オープン ／ N 1枚ずつ開く ／ J 正解発表 ／ ← → 問題の切替 ／ R 順位 ／ F 全画面</div>';
 
     el.innerHTML = html;
     renderProgress();
@@ -1144,7 +1149,7 @@
     var html = '';
     if (phase === 'final') html += '<button class="btn" data-act="hide-final">パネルに戻る</button>';
     else if (label) html += '<button class="btn primary" data-act="primary">' + label + '</button>';
-    if (phase === 'closed') html += '<button class="btn" data-act="open-all">一斉オープン</button>' + (isSurvey() ? '' : '<button class="btn" data-act="announce">正解発表</button>');
+    if (phase === 'closed' && label === '回答オープン') html += '<button class="btn" data-act="open-next">1枚ずつ開く</button>' + (isSurvey() ? '' : '<button class="btn" data-act="announce">正解発表</button>');
     if (!isSurvey()) html += '<button class="btn" data-act="toggle-rank">' + (stageView === 'rank' && !game.final ? 'パネル' : '順位') + '</button>';
     html += '<button class="btn ghost" data-act="present-off">全画面を終了</button>';
     el.innerHTML = html;
@@ -1386,7 +1391,8 @@
         html += '<tr' + (isOnline(pid) ? '' : ' class="off"') + '><td>' + (i + 1) + '</td><td class="nm">' + esc(p.name) + '</td>' +
           '<td><span class="net-lamps">' + dots + '</span> ' + (isOnline(pid) ? '<span class="ok">接続中</span>' : '<span class="ng">切断</span>') + '</td>' +
           (sv ? '' : '<td>' + rk.rank[pid] + '位</td><td>' + (sc[pid] || 0) + '点</td>') +
-          '<td class="ans">' + (a ? esc(answerText(q, a)) : '<span class="muted">—</span>') + '</td>' +
+          '<td class="ans">' + (!a ? '<span class="muted">—</span>'
+            : r.opened[pid] && r.phase !== 'open' ? esc(answerText(q, a)) : '<span class="muted">回答済み（未オープン）</span>') + '</td>' +
           '<td><button class="btn small danger" data-act="kick" data-pid="' + pid + '">外す</button></td></tr>';
       });
       html += '</tbody></table>';
@@ -1497,6 +1503,7 @@
     if (!$('#modal').hidden) return false;
     if (k === ' ' || k === 'Enter') primaryAction();
     else if (k === 'a' || k === 'A') openAll();
+    else if (k === 'n' || k === 'N') openNext();
     else if (k === 'j' || k === 'J') announce();
     else if (k === 'ArrowRight') moveQ(1);
     else if (k === 'ArrowLeft') moveQ(-1);
@@ -1523,6 +1530,7 @@
         case 'prev': moveQ(-1); break;
         case 'next': moveQ(1); break;
         case 'open-all': openAll(); break;
+        case 'open-next': openNext(); break;
         case 'announce': announce(); break;
         case 'redo': redoRound(); break;
         case 'final':

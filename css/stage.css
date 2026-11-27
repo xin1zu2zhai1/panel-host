@@ -114,6 +114,9 @@
   pointer-events: none;
 }
 .face.front { transform: rotateY(180deg); background: #fffdf6; }
+.panel:not(.opened) .face.front { visibility: hidden; transition: visibility 0s linear .3s; }
+.panel.opened .face.front { visibility: visible; transition: visibility 0s linear .3s; }
+.panel.opened .face.back { visibility: hidden; transition: visibility 0s linear .3s; }
 .back-inner { position: absolute; inset: 0; display: grid; place-items: center; }
 .pnum { font-size: calc(var(--pw) * .3); font-weight: 900; color: rgba(255, 255, 255, .18); line-height: 1; }
 .back-label {

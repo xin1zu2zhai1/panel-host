@@ -64,7 +64,7 @@
   }, 250);
 
   // ---- 操作 ----
-  var KEYS = { ' ': 1, Enter: 1, a: 1, A: 1, j: 1, J: 1, ArrowLeft: 1, ArrowRight: 1, r: 1, R: 1 };
+  var KEYS = { ' ': 1, Enter: 1, a: 1, A: 1, n: 1, N: 1, j: 1, J: 1, ArrowLeft: 1, ArrowRight: 1, r: 1, R: 1 };
   document.addEventListener('keydown', function (e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); return; }
